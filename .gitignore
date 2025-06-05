@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environment
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Anki package files
+*.apkg
+
+# Text files (except requirements.txt)
+*.txt
+!requirements.txt
+
+# Temporary files
+temp_extract/
