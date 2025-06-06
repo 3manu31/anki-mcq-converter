@@ -342,6 +342,14 @@ class MCQConverter:
                 
             mcq = self.parse_mcq_line(line)
             if mcq:
+                # Generate a random shuffle order for the options
+                num_options = len(mcq['options'])
+                shuffle_order = list(range(num_options))
+                random.shuffle(shuffle_order)
+                
+                # Create the shuffle order string (e.g., "2,0,3,1" for 4 options)
+                shuffle_order_str = ','.join(map(str, shuffle_order))
+                
                 # Create note with the MCQ data
                 note = genanki.Note(
                     model=self.model,
@@ -353,7 +361,7 @@ class MCQConverter:
                         *('' for _ in range(4 - len(mcq['options']))),  # Pad with empty strings if less than 4 options
                         '',  # Q_5 (optional 5th option)
                         mcq['answers'],
-                        '',  # ShuffleOrder (empty initially)
+                        shuffle_order_str,  # ShuffleOrder with random order
                         '',  # selected-option (empty initially)
                     ]
                 )
