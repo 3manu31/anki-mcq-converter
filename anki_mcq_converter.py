@@ -32,23 +32,63 @@ class MCQConverter:
                 'qfmt': '''
                     <div class="question">{{Question}}</div>
                     <div id="options-container">
-                        {{#Q_1}}<div class="option-wrapper" data-index="0" onclick="ankiSelectOption(0)">
-                            <div class="option">A) {{Q_1}}</div>
-                        </div>{{/Q_1}}
-                        {{#Q_2}}<div class="option-wrapper" data-index="1" onclick="ankiSelectOption(1)">
-                            <div class="option">B) {{Q_2}}</div>
-                        </div>{{/Q_2}}
-                        {{#Q_3}}<div class="option-wrapper" data-index="2" onclick="ankiSelectOption(2)">
-                            <div class="option">C) {{Q_3}}</div>
-                        </div>{{/Q_3}}
-                        {{#Q_4}}<div class="option-wrapper" data-index="3" onclick="ankiSelectOption(3)">
-                            <div class="option">D) {{Q_4}}</div>
-                        </div>{{/Q_4}}
+                        <!-- Options will be dynamically generated and shuffled -->
                     </div>
                     <div id="selected-option" style="display:none;">{{selected-option}}</div>
                     <div id="answers" style="display:none;">{{Answers}}</div>
                     
+                    <!-- Hidden option data -->
+                    <div style="display:none;" id="option-data">
+                        <div data-index="0">{{Q_1}}</div>
+                        <div data-index="1">{{Q_2}}</div>
+                        <div data-index="2">{{Q_3}}</div>
+                        <div data-index="3">{{Q_4}}</div>
+                    </div>
+                    
                     <script>
+                    // Shuffle array function
+                    function shuffleArray(array) {
+                        const shuffled = [...array];
+                        for (let i = shuffled.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                        }
+                        return shuffled;
+                    }
+                    
+                    // Initialize options with shuffle
+                    function initializeOptions() {
+                        const container = document.getElementById('options-container');
+                        const optionData = document.getElementById('option-data');
+                        const options = Array.from(optionData.children).filter(el => el.textContent.trim() !== '');
+                        
+                        // Create option objects with original indices
+                        const optionObjects = options.map((el, i) => ({
+                            text: el.textContent.trim(),
+                            originalIndex: parseInt(el.getAttribute('data-index')),
+                            displayIndex: i
+                        }));
+                        
+                        // Shuffle the options
+                        const shuffledOptions = shuffleArray(optionObjects);
+                        
+                        // Clear container and add shuffled options
+                        container.innerHTML = '';
+                        shuffledOptions.forEach((option, i) => {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'option-wrapper';
+                            wrapper.setAttribute('data-index', option.originalIndex);
+                            wrapper.onclick = function() { ankiSelectOption(option.originalIndex); };
+                            
+                            const optionDiv = document.createElement('div');
+                            optionDiv.className = 'option';
+                            optionDiv.textContent = String.fromCharCode(65 + i) + ') ' + option.text;
+                            
+                            wrapper.appendChild(optionDiv);
+                            container.appendChild(wrapper);
+                        });
+                    }
+                    
                     function checkAnswer(index) {
                         var answersStr = document.getElementById('answers').textContent.trim();
                         var answers = answersStr.split(" ");
@@ -56,10 +96,23 @@ class MCQConverter:
                     }
 
                     function showFeedback(isCorrect) {
+                        // Remove existing feedback
+                        var existing = document.querySelectorAll('.answer-feedback');
+                        existing.forEach(el => el.remove());
+                        
                         var feedbackDiv = document.createElement('div');
                         feedbackDiv.className = 'answer-feedback';
                         feedbackDiv.textContent = isCorrect ? '✓ Correct!' : '✗ Incorrect';
                         feedbackDiv.style.backgroundColor = isCorrect ? '#4CAF50' : '#f44336';
+                        feedbackDiv.style.color = 'white';
+                        feedbackDiv.style.position = 'fixed';
+                        feedbackDiv.style.bottom = '20px';
+                        feedbackDiv.style.left = '50%';
+                        feedbackDiv.style.transform = 'translateX(-50%)';
+                        feedbackDiv.style.padding = '12px 24px';
+                        feedbackDiv.style.borderRadius = '8px';
+                        feedbackDiv.style.fontWeight = 'bold';
+                        feedbackDiv.style.zIndex = '1000';
                         document.body.appendChild(feedbackDiv);
                     }
 
@@ -67,10 +120,10 @@ class MCQConverter:
                         var allOptions = document.querySelectorAll('.option-wrapper');
                         allOptions.forEach(opt => opt.className = 'option-wrapper');
                         
-                        var selected = document.querySelector(`.option-wrapper[data-index="${index}"]`);
+                        var selected = document.querySelector('.option-wrapper[data-index="' + index + '"]');
                         if (selected) {
                             var isCorrect = checkAnswer(index);
-                            selected.className = `option-wrapper ${isCorrect ? 'selected-correct' : 'selected-incorrect'}`;
+                            selected.className = 'option-wrapper ' + (isCorrect ? 'selected-correct' : 'selected-incorrect');
                             
                             showFeedback(isCorrect);
                             
@@ -79,7 +132,7 @@ class MCQConverter:
                                 var answers = document.getElementById('answers').textContent.trim().split(" ");
                                 answers.forEach((ans, i) => {
                                     if (ans === "1") {
-                                        var correct = document.querySelector(`.option-wrapper[data-index="${i}"]`);
+                                        var correct = document.querySelector('.option-wrapper[data-index="' + i + '"]');
                                         if (correct) correct.className += ' correct';
                                     }
                                 });
@@ -90,121 +143,14 @@ class MCQConverter:
                         }
                     }
                     
-                    // Function to shuffle an array
-                    function shuffleArray(array) {
-                        for (let i = array.length - 1; i > 0; i--) {
-                            const j = Math.floor(Math.random() * (i + 1));
-                            [array[i], array[j]] = [array[j], array[i]];
-                        }
-                        return array;
+                    // Initialize when page loads
+                    document.addEventListener('DOMContentLoaded', initializeOptions);
+                    // Also initialize immediately in case DOMContentLoaded already fired
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', initializeOptions);
+                    } else {
+                        initializeOptions();
                     }
-                    
-                    // Function to rebuild options with new random order
-                    function rebuildOptions() {
-                        const optionsContainer = document.getElementById('options-container');
-                        
-                        // Get all answer fields
-                        const answerFields = Array.from(document.querySelectorAll('.answer-field'))
-                            .map(field => ({ 
-                                text: field.getAttribute('data-value'),
-                                index: Array.from(field.parentNode.children).indexOf(field)
-                            }));
-                        
-                        // Shuffle the answer fields
-                        shuffleArray(answerFields);
-                        
-                        // Clear container
-                        optionsContainer.innerHTML = '';
-                        
-                        // Create new options in random order
-                        answerFields.forEach((field, i) => {
-                            const wrapper = document.createElement('div');
-                            wrapper.className = 'option-wrapper';
-                            wrapper.setAttribute('data-index', field.index);
-                            wrapper.onclick = function() { ankiSelectOption(field.index); };
-                            
-                            const option = document.createElement('div');
-                            option.className = 'option';
-                            option.innerHTML = String.fromCharCode(65 + i) + ') ' + field.text;
-                            
-                            wrapper.appendChild(option);
-                            optionsContainer.appendChild(wrapper);
-                        });
-                        
-                        // Store and save the shuffle order
-                        var order = Array.from(document.querySelectorAll('.option-wrapper'))
-                            .map(opt => opt.getAttribute('data-index'));
-                        localStorage.setItem(cardID, order.join(','));
-                    }
-                    
-                    // Function to check if answer is correct
-                    function checkAnswer(index) {
-                        var answersStr = document.getElementById('answers').textContent.trim();
-                        var answers = answersStr.split(" ");
-                        return answers[index] === "1";
-                    }
-                    
-                    // Function to show feedback
-                    function showFeedback(isCorrect) {
-                        // Remove existing feedback
-                        var existing = document.querySelectorAll('.answer-feedback');
-                        existing.forEach(el => el.remove());
-                        
-                        // Create feedback element
-                        var feedback = document.createElement('div');
-                        feedback.className = 'answer-feedback';
-                        if (isCorrect) {
-                            feedback.innerHTML = '✓ Correct!';
-                            feedback.style.backgroundColor = '#4CAF50';
-                        } else {
-                            feedback.innerHTML = '✗ Incorrect';
-                            feedback.style.backgroundColor = '#f44336';
-                        }
-                        document.body.appendChild(feedback);
-                    }
-                    
-                    // Function to handle option selection
-                    function ankiSelectOption(index) {
-                        // Remove all selections
-                        var allOptions = document.querySelectorAll('.option-wrapper');
-                        allOptions.forEach(opt => {
-                            opt.className = 'option-wrapper';
-                        });
-                        
-                        // Add selected class and check answer
-                        var selected = document.querySelector(`.option-wrapper[data-index="${index}"]`);
-                        if (selected) {
-                            var isCorrect = checkAnswer(index);
-                            selected.className = 'option-wrapper ' + 
-                                (isCorrect ? 'selected-correct' : 'selected-incorrect');
-                            
-                            // Store selection
-                            var hidden = document.getElementById('selected-option');
-                            if (hidden) {
-                                hidden.textContent = index;
-                            }
-                            
-                            showFeedback(isCorrect);
-                            
-                            // If incorrect, show correct answer
-                            if (!isCorrect) {
-                                var answers = document.getElementById('answers').textContent.trim().split(" ");
-                                answers.forEach((ans, i) => {
-                                    if (ans === "1") {
-                                        var correct = document.querySelector(`.option-wrapper[data-index="${i}"]`);
-                                        if (correct) {
-                                            correct.className += ' correct';
-                                        }
-                                    }
-                                });
-                            }
-                        }
-                    }
-                    
-                    // Initialize on load
-                    document.addEventListener('DOMContentLoaded', function() {
-                        rebuildOptions();
-                    });
                     </script>
                 ''',
                 'afmt': '''
@@ -216,7 +162,7 @@ class MCQConverter:
                         var answers = document.getElementById('answers').textContent.trim().split(" ");
                         answers.forEach((ans, i) => {
                             if (ans === "1") {
-                                var correct = document.querySelector(`.option-wrapper[data-index="${i}"]`);
+                                var correct = document.querySelector('.option-wrapper[data-index="' + i + '"]');
                                 if (correct) correct.className += ' correct';
                             }
                         });
@@ -342,26 +288,23 @@ class MCQConverter:
                 
             mcq = self.parse_mcq_line(line)
             if mcq:
-                # Generate a random shuffle order for the options
-                num_options = len(mcq['options'])
-                shuffle_order = list(range(num_options))
-                random.shuffle(shuffle_order)
+                # Pad options to 4 elements
+                options = mcq['options'] + [''] * (4 - len(mcq['options']))
                 
-                # Create the shuffle order string (e.g., "2,0,3,1" for 4 options)
-                shuffle_order_str = ','.join(map(str, shuffle_order))
-                
-                # Create note with the MCQ data
+                # Create note with the MCQ data (no shuffling here - done dynamically in JavaScript)
                 note = genanki.Note(
                     model=self.model,
                     fields=[
                         '',  # Title (blank)
                         html.escape(mcq['question']),
                         '2',  # Q type (2 for single choice)
-                        *[html.escape(opt) for opt in mcq['options']],
-                        *('' for _ in range(4 - len(mcq['options']))),  # Pad with empty strings if less than 4 options
+                        html.escape(options[0]),  # Q_1
+                        html.escape(options[1]),  # Q_2
+                        html.escape(options[2]),  # Q_3
+                        html.escape(options[3]),  # Q_4
                         '',  # Q_5 (optional 5th option)
-                        mcq['answers'],
-                        shuffle_order_str,  # ShuffleOrder with random order
+                        mcq['answers'],  # Original answer mapping
+                        '',  # ShuffleOrder (not used with dynamic shuffling)
                         '',  # selected-option (empty initially)
                     ]
                 )
