@@ -1,1 +1,0 @@
-# anki-mcq-converter
