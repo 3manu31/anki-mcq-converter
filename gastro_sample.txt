@@ -1,0 +1,7 @@
+#separator:tab
+#html:true
+Hyperthyroidism Top cause:<br><br>Goiter<br>Graves<br>Tsh secreting pit tumors<br>Amiodarone induced thyroxicosis type 1	Graves
+Not a common target organ damage with chronic hypertension:<br><br>Neprhopathy<br>Hepatopathy<br>Retinopathy<br>Cardiomyopathy	Hepatopathy
+PCOS diagnostic criteria include all but one:<br><br>Increased ovaries volume<br>Hyperinsulinemia<br>Hyperandrogenism <br>Oligoanovulation	Hyperinsulinemia
+Homocysteine is a metabolite of: <br><br>Albumin<br>Folate<br>Alanine<br>B12<br>Methionin	Methionin
+Most directly contributes to secondary hypertension:<br><br>Renal artery stenosis<br>Obesity<br>Sedentary lifestyle<br>Excessive salt intake	Renal artery stenosis
