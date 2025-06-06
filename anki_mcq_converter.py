@@ -36,7 +36,7 @@ class MCQConverter:
                     </div>
                     <div id="selected-option" style="display:none;">{{selected-option}}</div>
                     <div id="answers" style="display:none;">{{Answers}}</div>
-                    <div id="shuffle-order" style="display:none;"></div>
+                    <div id="shuffle-order" style="display:none;">{{ShuffleOrder}}</div>
                     
                     <!-- Hidden option data -->
                     <div style="display:none;" id="option-data">
@@ -46,18 +46,9 @@ class MCQConverter:
                         {{#Q_4}}<div data-index="3">{{Q_4}}</div>{{/Q_4}}
                     </div>
                     
-                    <!-- Answer review section (initially hidden) -->
-                    <div id="answer-review" style="display:none;">
-                        <hr style="margin: 20px 0; border: 1px solid #ddd;">
-                        <div style="text-align: center; margin: 20px 0; font-weight: bold; color: #333;">
-                            Answer Review Complete
-                        </div>
-                    </div>
-                    
                     <script>
-                    // Flag to prevent re-initialization after answer is selected
-                    let cardInitialized = false;
-                    let answerSelected = false;
+                    // Shuffle once when card opens - store as session variable
+                    window.sessionShuffleOrder = window.sessionShuffleOrder || null;
                     
                     // Simple random shuffle function
                     function shuffleArray(array) {
@@ -69,32 +60,39 @@ class MCQConverter:
                         return shuffled;
                     }
                     
-                    // Initialize options with shuffle (ONLY ONCE)
-                    function initializeOptions() {
-                        // Prevent re-initialization if already done or answer selected
-                        if (cardInitialized || answerSelected) {
-                            return;
+                    // Get options and create shuffle order - ONLY ONCE per card opening
+                    function getOrCreateShuffleOrder() {
+                        // If we don't have a shuffle order for this card yet, create one
+                        if (!window.sessionShuffleOrder) {
+                            const optionData = document.getElementById('option-data');
+                            const options = Array.from(optionData.children).filter(el => el.textContent.trim() !== '');
+                            
+                            if (options.length === 0) return [];
+                            
+                            // Create option objects with original indices
+                            const optionObjects = options.map((el, i) => ({
+                                text: el.textContent.trim(),
+                                originalIndex: parseInt(el.getAttribute('data-index'))
+                            }));
+                            
+                            // Create shuffle order and store it for this entire card session
+                            window.sessionShuffleOrder = shuffleArray(optionObjects);
+                            
+                            // Store in hidden field for back side access
+                            document.getElementById('shuffle-order').textContent = JSON.stringify(window.sessionShuffleOrder);
                         }
                         
+                        return window.sessionShuffleOrder;
+                    }
+                    
+                    // Initialize front side options
+                    function initializeFrontSide() {
                         const container = document.getElementById('options-container');
-                        const optionData = document.getElementById('option-data');
-                        const options = Array.from(optionData.children).filter(el => el.textContent.trim() !== '');
+                        const shuffledOptions = getOrCreateShuffleOrder();
                         
-                        // Mark as initialized
-                        cardInitialized = true;
-                        const optionObjects = options.map((el, i) => ({
-                            text: el.textContent.trim(),
-                            originalIndex: parseInt(el.getAttribute('data-index')),
-                            displayIndex: i
-                        }));
+                        if (shuffledOptions.length === 0) return;
                         
-                        // Shuffle the options randomly each time
-                        const shuffledOptions = shuffleArray(optionObjects);
-                        
-                        // Store shuffle order for consistency
-                        document.getElementById('shuffle-order').textContent = JSON.stringify(shuffledOptions);
-                        
-                        // Clear container and add options in shuffled order
+                        // Display options in shuffled order
                         container.innerHTML = '';
                         shuffledOptions.forEach((option, i) => {
                             const wrapper = document.createElement('div');
@@ -144,9 +142,6 @@ class MCQConverter:
                     }
 
                     function ankiSelectOption(index) {
-                        // Mark that an answer has been selected
-                        answerSelected = true;
-                        
                         // Prevent multiple selections
                         var allOptions = document.querySelectorAll('.option-wrapper');
                         var alreadyAnswered = Array.from(allOptions).some(opt => 
@@ -185,26 +180,119 @@ class MCQConverter:
                                 opt.style.cursor = 'default';
                             });
                             
-                            // Show answer review section without triggering card flip
+                            // Show native Anki review buttons by triggering answer state
                             setTimeout(function() {
-                                document.getElementById('answer-review').style.display = 'block';
-                            }, 1500); // Give time to see the feedback
+                                // Trigger Anki's native answer state to show review buttons
+                                if (typeof pycmd !== 'undefined') {
+                                    pycmd('ans');
+                                }
+                            }, 2000); // Give time to see the feedback
                         }
                     }
                     
-                    // Initialize when page loads
-                    document.addEventListener('DOMContentLoaded', initializeOptions);
+                    // Initialize when page loads - FRONT SIDE ONLY
+                    document.addEventListener('DOMContentLoaded', initializeFrontSide);
                     if (document.readyState !== 'loading') {
-                        initializeOptions();
+                        initializeFrontSide();
                     }
                     </script>
                 ''',
                 'afmt': '''
-                    {{FrontSide}}
-                    <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
-                        <strong>Review Complete</strong><br>
-                        <small>Use the buttons below to rate your performance</small>
+                    <div class="question">{{Question}}</div>
+                    <div id="options-container-back">
+                        <!-- Options will be displayed with answer highlighting -->
                     </div>
+                    <div id="selected-option" style="display:none;">{{selected-option}}</div>
+                    <div id="answers" style="display:none;">{{Answers}}</div>
+                    <div id="shuffle-order" style="display:none;">{{ShuffleOrder}}</div>
+                    
+                    <!-- Hidden option data -->
+                    <div style="display:none;" id="option-data">
+                        {{#Q_1}}<div data-index="0">{{Q_1}}</div>{{/Q_1}}
+                        {{#Q_2}}<div data-index="1">{{Q_2}}</div>{{/Q_2}}
+                        {{#Q_3}}<div data-index="2">{{Q_3}}</div>{{/Q_3}}
+                        {{#Q_4}}<div data-index="3">{{Q_4}}</div>{{/Q_4}}
+                    </div>
+                    
+                    <script>
+                    // Get the SAME shuffle order that was created on the front side
+                    function getStoredShuffleOrder() {
+                        const shuffleOrderDiv = document.getElementById('shuffle-order');
+                        const storedOrder = shuffleOrderDiv.textContent.trim();
+                        
+                        // Try to get stored shuffle order first
+                        if (storedOrder && storedOrder !== '{{ShuffleOrder}}' && storedOrder !== '') {
+                            try {
+                                return JSON.parse(storedOrder);
+                            } catch (e) {
+                                // If parsing fails, fall back to original order
+                            }
+                        }
+                        
+                        // Check if front side has session shuffle order
+                        if (window.sessionShuffleOrder) {
+                            return window.sessionShuffleOrder;
+                        }
+                        
+                        // Fallback: create original order
+                        const optionData = document.getElementById('option-data');
+                        const options = Array.from(optionData.children).filter(el => el.textContent.trim() !== '');
+                        return options.map((el, i) => ({
+                            text: el.textContent.trim(),
+                            originalIndex: parseInt(el.getAttribute('data-index'))
+                        }));
+                    }
+                    
+                    // Initialize back side with EXACT same shuffle order from front side
+                    function initializeBackSide() {
+                        const container = document.getElementById('options-container-back');
+                        const shuffleOrder = getStoredShuffleOrder();
+                        
+                        if (shuffleOrder.length === 0) return;
+                        
+                        const selectedOptionDiv = document.getElementById('selected-option');
+                        const selectedIndex = selectedOptionDiv.textContent.trim() !== '' && 
+                                           selectedOptionDiv.textContent.trim() !== '{{selected-option}}' ? 
+                                           parseInt(selectedOptionDiv.textContent.trim()) : -1;
+                        
+                        // Display options in SAME shuffled order as front side
+                        container.innerHTML = '';
+                        shuffleOrder.forEach((option, i) => {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'option-wrapper disabled';
+                            wrapper.setAttribute('data-index', option.originalIndex);
+                            
+                            const optionDiv = document.createElement('div');
+                            optionDiv.className = 'option';
+                            optionDiv.textContent = String.fromCharCode(65 + i) + ') ' + option.text;
+                            
+                            // Apply answer highlighting
+                            const isSelected = option.originalIndex === selectedIndex;
+                            const isCorrect = checkAnswerBack(option.originalIndex);
+                            
+                            if (isSelected) {
+                                wrapper.className = 'option-wrapper ' + (isCorrect ? 'selected-correct' : 'selected-incorrect') + ' disabled';
+                            } else if (isCorrect) {
+                                wrapper.className = 'option-wrapper correct disabled';
+                            }
+                            
+                            wrapper.appendChild(optionDiv);
+                            container.appendChild(wrapper);
+                        });
+                    }
+                    
+                    function checkAnswerBack(index) {
+                        var answersStr = document.getElementById('answers').textContent.trim();
+                        var answers = answersStr.split(" ");
+                        return answers[index] === "1";
+                    }
+                    
+                    // Initialize when page loads - only on back side
+                    document.addEventListener('DOMContentLoaded', initializeBackSide);
+                    if (document.readyState !== 'loading') {
+                        initializeBackSide();
+                    }
+                    </script>
                 '''
             }],
             css='''
@@ -274,10 +362,6 @@ class MCQConverter:
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translate(-50%, 10px); }
                     to { opacity: 1; transform: translate(-50%, 0); }
-                }
-                #answer-review {
-                    margin-top: 15px;
-                    animation: slideDown 0.3s ease;
                 }
                 @keyframes slideDown {
                     from { opacity: 0; transform: translateY(-10px); }
