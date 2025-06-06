@@ -32,201 +32,345 @@ class MCQConverter:
                 'qfmt': '''
                     <div class="question">{{Question}}</div>
                     <div id="options-container">
-                        {{#Q_1}}<div class="option-wrapper" data-index="0" onclick="ankiSelectOption(0)">
-                            <div class="option">A) {{Q_1}}</div>
-                        </div>{{/Q_1}}
-                        {{#Q_2}}<div class="option-wrapper" data-index="1" onclick="ankiSelectOption(1)">
-                            <div class="option">B) {{Q_2}}</div>
-                        </div>{{/Q_2}}
-                        {{#Q_3}}<div class="option-wrapper" data-index="2" onclick="ankiSelectOption(2)">
-                            <div class="option">C) {{Q_3}}</div>
-                        </div>{{/Q_3}}
-                        {{#Q_4}}<div class="option-wrapper" data-index="3" onclick="ankiSelectOption(3)">
-                            <div class="option">D) {{Q_4}}</div>
-                        </div>{{/Q_4}}
+                        <!-- Options will be dynamically generated and shuffled -->
                     </div>
                     <div id="selected-option" style="display:none;">{{selected-option}}</div>
                     <div id="answers" style="display:none;">{{Answers}}</div>
+                    <div id="shuffle-order" style="display:none;">{{ShuffleOrder}}</div>
+                    
+                    <!-- Hidden option data -->
+                    <div style="display:none;" id="option-data">
+                        {{#Q_1}}<div data-index="0">{{Q_1}}</div>{{/Q_1}}
+                        {{#Q_2}}<div data-index="1">{{Q_2}}</div>{{/Q_2}}
+                        {{#Q_3}}<div data-index="2">{{Q_3}}</div>{{/Q_3}}
+                        {{#Q_4}}<div data-index="3">{{Q_4}}</div>{{/Q_4}}
+                    </div>
                     
                     <script>
-                    function checkAnswer(index) {
-                        var answersStr = document.getElementById('answers').textContent.trim();
-                        var answers = answersStr.split(" ");
-                        return answers[index] === "1";
-                    }
-
-                    function showFeedback(isCorrect) {
-                        var feedbackDiv = document.createElement('div');
-                        feedbackDiv.className = 'answer-feedback';
-                        feedbackDiv.textContent = isCorrect ? '✓ Correct!' : '✗ Incorrect';
-                        feedbackDiv.style.backgroundColor = isCorrect ? '#4CAF50' : '#f44336';
-                        document.body.appendChild(feedbackDiv);
-                    }
-
-                    function ankiSelectOption(index) {
-                        var allOptions = document.querySelectorAll('.option-wrapper');
-                        allOptions.forEach(opt => opt.className = 'option-wrapper');
-                        
-                        var selected = document.querySelector(`.option-wrapper[data-index="${index}"]`);
-                        if (selected) {
-                            var isCorrect = checkAnswer(index);
-                            selected.className = `option-wrapper ${isCorrect ? 'selected-correct' : 'selected-incorrect'}`;
-                            
-                            showFeedback(isCorrect);
-                            
-                            if (!isCorrect) {
-                                // Show correct answer
-                                var answers = document.getElementById('answers').textContent.trim().split(" ");
-                                answers.forEach((ans, i) => {
-                                    if (ans === "1") {
-                                        var correct = document.querySelector(`.option-wrapper[data-index="${i}"]`);
-                                        if (correct) correct.className += ' correct';
-                                    }
-                                });
-                            }
-                            
-                            var hidden = document.getElementById('selected-option');
-                            if (hidden) hidden.textContent = index;
-                        }
+                    // Create a unique identifier for this card based on its content
+                    function getCardId() {
+                        const question = document.querySelector('.question').textContent.trim();
+                        const optionData = document.getElementById('option-data');
+                        const options = Array.from(optionData.children).map(el => el.textContent.trim()).join('|');
+                        return btoa(question + '|||' + options).substring(0, 20); // Base64 encoded, shortened
                     }
                     
-                    // Function to shuffle an array
+                    // Simple random shuffle function
                     function shuffleArray(array) {
-                        for (let i = array.length - 1; i > 0; i--) {
+                        const shuffled = [...array];
+                        for (let i = shuffled.length - 1; i > 0; i--) {
                             const j = Math.floor(Math.random() * (i + 1));
-                            [array[i], array[j]] = [array[j], array[i]];
+                            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
                         }
-                        return array;
+                        return shuffled;
                     }
                     
-                    // Function to rebuild options with new random order
-                    function rebuildOptions() {
-                        const optionsContainer = document.getElementById('options-container');
+                    // Get options and create shuffle order - ONLY ONCE per card
+                    function getOrCreateShuffleOrder() {
+                        const cardId = getCardId();
+                        const sessionKey = 'cardShuffle_' + cardId;
                         
-                        // Get all answer fields
-                        const answerFields = Array.from(document.querySelectorAll('.answer-field'))
-                            .map(field => ({ 
-                                text: field.getAttribute('data-value'),
-                                index: Array.from(field.parentNode.children).indexOf(field)
-                            }));
+                        // Check if we have a session shuffle order for this specific card
+                        if (window[sessionKey]) {
+                            return window[sessionKey];
+                        }
                         
-                        // Shuffle the answer fields
-                        shuffleArray(answerFields);
+                        // Check if we have a stored shuffle order in the hidden field
+                        const shuffleOrderEl = document.getElementById('shuffle-order');
+                        const storedOrder = shuffleOrderEl.textContent.trim();
                         
-                        // Clear container
-                        optionsContainer.innerHTML = '';
+                        if (storedOrder && storedOrder !== '{{ShuffleOrder}}' && storedOrder !== '') {
+                            try {
+                                const parsed = JSON.parse(storedOrder);
+                                window[sessionKey] = parsed; // Store in session
+                                return parsed;
+                            } catch (e) {
+                                // If parsing fails, create a new shuffle order
+                            }
+                        }
                         
-                        // Create new options in random order
-                        answerFields.forEach((field, i) => {
+                        // Create new shuffle order for this card
+                        const optionData = document.getElementById('option-data');
+                        const options = Array.from(optionData.children).filter(el => el.textContent.trim() !== '');
+                        
+                        if (options.length === 0) return [];
+                        
+                        // Create option objects with original indices for THIS CARD'S options
+                        const optionObjects = options.map((el, i) => ({
+                            text: el.textContent.trim(),
+                            originalIndex: parseInt(el.getAttribute('data-index'))
+                        }));
+                        
+                        // Create shuffle order and store it for this card
+                        const shuffledOrder = shuffleArray(optionObjects);
+                        
+                        // Store in both session and hidden field
+                        window[sessionKey] = shuffledOrder;
+                        shuffleOrderEl.textContent = JSON.stringify(shuffledOrder);
+                        
+                        return shuffledOrder;
+                    }
+                    
+                    // Initialize front side options
+                    function initializeFrontSide() {
+                        const container = document.getElementById('options-container');
+                        const shuffledOptions = getOrCreateShuffleOrder();
+                        
+                        if (shuffledOptions.length === 0) return;
+                        
+                        // Display options in shuffled order
+                        container.innerHTML = '';
+                        shuffledOptions.forEach((option, i) => {
                             const wrapper = document.createElement('div');
                             wrapper.className = 'option-wrapper';
-                            wrapper.setAttribute('data-index', field.index);
-                            wrapper.onclick = function() { ankiSelectOption(field.index); };
+                            wrapper.setAttribute('data-index', option.originalIndex);
+                            wrapper.onclick = function() { ankiSelectOption(option.originalIndex); };
                             
-                            const option = document.createElement('div');
-                            option.className = 'option';
-                            option.innerHTML = String.fromCharCode(65 + i) + ') ' + field.text;
+                            const optionDiv = document.createElement('div');
+                            optionDiv.className = 'option';
+                            optionDiv.textContent = String.fromCharCode(65 + i) + ') ' + option.text;
                             
-                            wrapper.appendChild(option);
-                            optionsContainer.appendChild(wrapper);
+                            wrapper.appendChild(optionDiv);
+                            container.appendChild(wrapper);
                         });
-                        
-                        // Store and save the shuffle order
-                        var order = Array.from(document.querySelectorAll('.option-wrapper'))
-                            .map(opt => opt.getAttribute('data-index'));
-                        localStorage.setItem(cardID, order.join(','));
                     }
                     
-                    // Function to check if answer is correct
                     function checkAnswer(index) {
                         var answersStr = document.getElementById('answers').textContent.trim();
                         var answers = answersStr.split(" ");
                         return answers[index] === "1";
                     }
-                    
-                    // Function to show feedback
+
                     function showFeedback(isCorrect) {
                         // Remove existing feedback
                         var existing = document.querySelectorAll('.answer-feedback');
                         existing.forEach(el => el.remove());
                         
-                        // Create feedback element
-                        var feedback = document.createElement('div');
-                        feedback.className = 'answer-feedback';
-                        if (isCorrect) {
-                            feedback.innerHTML = '✓ Correct!';
-                            feedback.style.backgroundColor = '#4CAF50';
-                        } else {
-                            feedback.innerHTML = '✗ Incorrect';
-                            feedback.style.backgroundColor = '#f44336';
-                        }
-                        document.body.appendChild(feedback);
-                    }
-                    
-                    // Function to handle option selection
-                    function ankiSelectOption(index) {
-                        // Remove all selections
-                        var allOptions = document.querySelectorAll('.option-wrapper');
-                        allOptions.forEach(opt => {
-                            opt.className = 'option-wrapper';
-                        });
+                        var feedbackDiv = document.createElement('div');
+                        feedbackDiv.className = 'answer-feedback';
+                        feedbackDiv.textContent = isCorrect ? '✓ Correct!' : '✗ Incorrect';
+                        feedbackDiv.style.backgroundColor = isCorrect ? '#4CAF50' : '#f44336';
+                        feedbackDiv.style.color = 'white';
+                        feedbackDiv.style.position = 'fixed';
+                        feedbackDiv.style.bottom = '20px';
+                        feedbackDiv.style.left = '50%';
+                        feedbackDiv.style.transform = 'translateX(-50%)';
+                        feedbackDiv.style.padding = '12px 24px';
+                        feedbackDiv.style.borderRadius = '8px';
+                        feedbackDiv.style.fontWeight = 'bold';
+                        feedbackDiv.style.zIndex = '1000';
+                        document.body.appendChild(feedbackDiv);
                         
-                        // Add selected class and check answer
-                        var selected = document.querySelector(`.option-wrapper[data-index="${index}"]`);
+                        // Remove feedback after 2 seconds
+                        setTimeout(function() {
+                            feedbackDiv.remove();
+                        }, 2000);
+                    }
+
+                    function ankiSelectOption(index) {
+                        // Prevent multiple selections
+                        var allOptions = document.querySelectorAll('.option-wrapper');
+                        var alreadyAnswered = Array.from(allOptions).some(opt => 
+                            opt.className.includes('selected-') || opt.className.includes('correct'));
+                        
+                        if (alreadyAnswered) return; // Don't allow re-selection
+                        
+                        // Clear all option styles first
+                        allOptions.forEach(opt => opt.className = 'option-wrapper disabled');
+                        
+                        var selected = document.querySelector('.option-wrapper[data-index="' + index + '"]');
                         if (selected) {
                             var isCorrect = checkAnswer(index);
-                            selected.className = 'option-wrapper ' + 
-                                (isCorrect ? 'selected-correct' : 'selected-incorrect');
-                            
-                            // Store selection
-                            var hidden = document.getElementById('selected-option');
-                            if (hidden) {
-                                hidden.textContent = index;
-                            }
+                            selected.className = 'option-wrapper ' + (isCorrect ? 'selected-correct' : 'selected-incorrect');
                             
                             showFeedback(isCorrect);
                             
-                            // If incorrect, show correct answer
-                            if (!isCorrect) {
-                                var answers = document.getElementById('answers').textContent.trim().split(" ");
-                                answers.forEach((ans, i) => {
-                                    if (ans === "1") {
-                                        var correct = document.querySelector(`.option-wrapper[data-index="${i}"]`);
-                                        if (correct) {
-                                            correct.className += ' correct';
-                                        }
+                            // Always show the correct answer(s) for learning
+                            var answers = document.getElementById('answers').textContent.trim().split(" ");
+                            answers.forEach((ans, i) => {
+                                if (ans === "1") {
+                                    var correct = document.querySelector('.option-wrapper[data-index="' + i + '"]');
+                                    if (correct && !correct.className.includes('selected-')) {
+                                        correct.className = 'option-wrapper correct disabled';
                                     }
-                                });
-                            }
+                                }
+                            });
+                            
+                            // Store selection
+                            var hidden = document.getElementById('selected-option');
+                            if (hidden) hidden.textContent = index;
+                            
+                            // Disable clicking on all options
+                            allOptions.forEach(opt => {
+                                opt.onclick = null;
+                                opt.style.cursor = 'default';
+                            });
+                            
+                            // Show native Anki review buttons by triggering answer state
+                            setTimeout(function() {
+                                // Trigger Anki's native answer state to show review buttons
+                                if (typeof pycmd !== 'undefined') {
+                                    pycmd('ans');
+                                }
+                            }, 2000); // Give time to see the feedback
                         }
                     }
                     
-                    // Initialize on load
-                    document.addEventListener('DOMContentLoaded', function() {
-                        rebuildOptions();
-                    });
+                    // Initialize when page loads - FRONT SIDE ONLY
+                    document.addEventListener('DOMContentLoaded', initializeFrontSide);
+                    if (document.readyState !== 'loading') {
+                        initializeFrontSide();
+                    }
                     </script>
                 ''',
                 'afmt': '''
-                    {{FrontSide}}
-                    <hr id="answer">
+                    <div class="question">{{Question}}</div>
+                    <div id="options-container-back">
+                        <!-- Options will be displayed with answer highlighting -->
+                    </div>
+                    <div id="selected-option" style="display:none;">{{selected-option}}</div>
+                    <div id="answers" style="display:none;">{{Answers}}</div>
+                    <div id="shuffle-order" style="display:none;">{{ShuffleOrder}}</div>
+                    
+                    <!-- Hidden option data -->
+                    <div style="display:none;" id="option-data">
+                        {{#Q_1}}<div data-index="0">{{Q_1}}</div>{{/Q_1}}
+                        {{#Q_2}}<div data-index="1">{{Q_2}}</div>{{/Q_2}}
+                        {{#Q_3}}<div data-index="2">{{Q_3}}</div>{{/Q_3}}
+                        {{#Q_4}}<div data-index="3">{{Q_4}}</div>{{/Q_4}}
+                    </div>
+                    
                     <script>
-                    // Automatically show correct answer on the back
-                    (function() {
-                        var answers = document.getElementById('answers').textContent.trim().split(" ");
-                        answers.forEach((ans, i) => {
-                            if (ans === "1") {
-                                var correct = document.querySelector(`.option-wrapper[data-index="${i}"]`);
-                                if (correct) correct.className += ' correct';
+                    // Create a unique identifier for this card based on its content
+                    function getCardId() {
+                        const question = document.querySelector('.question').textContent.trim();
+                        const optionData = document.getElementById('option-data');
+                        const options = Array.from(optionData.children).map(el => el.textContent.trim()).join('|');
+                        return btoa(question + '|||' + options).substring(0, 20); // Base64 encoded, shortened
+                    }
+                    
+                    // Get the SAME shuffle order that was created on the front side
+                    function getStoredShuffleOrder() {
+                        const cardId = getCardId();
+                        const sessionKey = 'cardShuffle_' + cardId;
+                        
+                        // First check if we have it in session storage
+                        if (window[sessionKey]) {
+                            return window[sessionKey];
+                        }
+                        
+                        // Try to get stored shuffle order from hidden field
+                        const shuffleOrderDiv = document.getElementById('shuffle-order');
+                        const storedOrder = shuffleOrderDiv.textContent.trim();
+                        
+                        if (storedOrder && storedOrder !== '{{ShuffleOrder}}' && storedOrder !== '') {
+                            try {
+                                const parsed = JSON.parse(storedOrder);
+                                window[sessionKey] = parsed; // Store in session for consistency
+                                return parsed;
+                            } catch (e) {
+                                // If parsing fails, fall back to original order
                             }
+                        }
+                        
+                        // Fallback: create original order from this card's options
+                        const optionData = document.getElementById('option-data');
+                        const options = Array.from(optionData.children).filter(el => el.textContent.trim() !== '');
+                        return options.map((el, i) => ({
+                            text: el.textContent.trim(),
+                            originalIndex: parseInt(el.getAttribute('data-index'))
+                        }));
+                    }
+                    
+                    // Initialize back side with EXACT same shuffle order and selection state from front side
+                    function initializeBackSide() {
+                        const container = document.getElementById('options-container-back');
+                        const shuffleOrder = getStoredShuffleOrder();
+                        
+                        if (shuffleOrder.length === 0) return;
+                        
+                        const selectedOptionDiv = document.getElementById('selected-option');
+                        const selectedIndex = selectedOptionDiv.textContent.trim() !== '' && 
+                                           selectedOptionDiv.textContent.trim() !== '{{selected-option}}' ? 
+                                           parseInt(selectedOptionDiv.textContent.trim()) : -1;
+                        
+                        // Display options in SAME shuffled order as front side
+                        container.innerHTML = '';
+                        shuffleOrder.forEach((option, i) => {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'option-wrapper disabled';
+                            wrapper.setAttribute('data-index', option.originalIndex);
+                            
+                            const optionDiv = document.createElement('div');
+                            optionDiv.className = 'option';
+                            optionDiv.textContent = String.fromCharCode(65 + i) + ') ' + option.text;
+                            
+                            // Apply highlighting to match front side state
+                            const isSelected = option.originalIndex === selectedIndex;
+                            const isCorrect = checkAnswerBack(option.originalIndex);
+                            
+                            if (isSelected) {
+                                // Show user's selection with appropriate styling
+                                wrapper.className = 'option-wrapper ' + (isCorrect ? 'selected-correct' : 'selected-incorrect') + ' disabled';
+                            } else if (isCorrect) {
+                                // Always show correct answers highlighted for learning
+                                wrapper.className = 'option-wrapper correct disabled';
+                            } else {
+                                // Regular options remain neutral
+                                wrapper.className = 'option-wrapper disabled';
+                            }
+                            
+                            wrapper.appendChild(optionDiv);
+                            container.appendChild(wrapper);
                         });
                         
-                        // If an option was selected, show it
-                        var selected = document.getElementById('selected-option');
-                        if (selected && selected.textContent) {
-                            ankiSelectOption(parseInt(selected.textContent));
+                        // Show the same feedback message on back side if user made a selection
+                        if (selectedIndex !== -1) {
+                            const isCorrect = checkAnswerBack(selectedIndex);
+                            showBackSideFeedback(isCorrect);
                         }
-                    })();
+                    }
+                    
+                    // Show feedback message on back side to match front side experience
+                    function showBackSideFeedback(isCorrect) {
+                        // Remove any existing feedback first
+                        const existing = document.querySelectorAll('.answer-feedback');
+                        existing.forEach(el => el.remove());
+                        
+                        const feedbackDiv = document.createElement('div');
+                        feedbackDiv.className = 'answer-feedback';
+                        feedbackDiv.textContent = isCorrect ? '✓ Correct!' : '✗ Incorrect';
+                        feedbackDiv.style.backgroundColor = isCorrect ? '#4CAF50' : '#f44336';
+                        feedbackDiv.style.color = 'white';
+                        feedbackDiv.style.position = 'fixed';
+                        feedbackDiv.style.bottom = '20px';
+                        feedbackDiv.style.left = '50%';
+                        feedbackDiv.style.transform = 'translateX(-50%)';
+                        feedbackDiv.style.padding = '12px 24px';
+                        feedbackDiv.style.borderRadius = '8px';
+                        feedbackDiv.style.fontWeight = 'bold';
+                        feedbackDiv.style.zIndex = '1000';
+                        feedbackDiv.style.animation = 'fadeIn 0.3s ease';
+                        
+                        document.body.appendChild(feedbackDiv);
+                        
+                        // Keep feedback visible longer on back side since it's more permanent
+                        setTimeout(function() {
+                            feedbackDiv.remove();
+                        }, 4000); // 4 seconds instead of 2
+                    }
+                    
+                    function checkAnswerBack(index) {
+                        var answersStr = document.getElementById('answers').textContent.trim();
+                        var answers = answersStr.split(" ");
+                        return answers[index] === "1";
+                    }
+                    
+                    // Initialize when page loads - only on back side
+                    document.addEventListener('DOMContentLoaded', initializeBackSide);
+                    if (document.readyState !== 'loading') {
+                        initializeBackSide();
+                    }
                     </script>
                 '''
             }],
@@ -244,7 +388,7 @@ class MCQConverter:
                     font-weight: bold;
                     margin-bottom: 20px;
                 }
-                #options-container {
+                #options-container, #options-container-back {
                     margin-top: 20px;
                 }
                 .option-wrapper {
@@ -256,10 +400,14 @@ class MCQConverter:
                     transition: all 0.3s ease;
                     background-color: white;
                 }
-                .option-wrapper:hover {
+                .option-wrapper:hover:not(.disabled) {
                     background-color: #f5f5f5;
                     border-color: #bbb;
                     transform: translateY(-1px);
+                }
+                .option-wrapper.disabled {
+                    cursor: default !important;
+                    pointer-events: none;
                 }
                 .option-wrapper.correct {
                     background-color: #e8f5e9;
@@ -293,6 +441,10 @@ class MCQConverter:
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translate(-50%, 10px); }
                     to { opacity: 1; transform: translate(-50%, 0); }
+                }
+                @keyframes slideDown {
+                    from { opacity: 0; transform: translateY(-10px); }
+                    to { opacity: 1; transform: translateY(0); }
                 }
             '''
         )
@@ -342,20 +494,19 @@ class MCQConverter:
                 
             mcq = self.parse_mcq_line(line)
             if mcq:
+                # Create note with the MCQ data
                 note = genanki.Note(
                     model=self.model,
                     fields=[
-                        '',                             # Title
-                        html.escape(mcq['question']),   # Question
-                        '1',                            # Q type (1 for multiple choice)
-                        html.escape(mcq['options'][0]), # Q_1
-                        html.escape(mcq['options'][1]), # Q_2
-                        html.escape(mcq['options'][2]), # Q_3
-                        html.escape(mcq['options'][3]), # Q_4
-                        '',                             # Q_5
-                        mcq['answers'],                 # Answers
-                        '',                             # ShuffleOrder
-                        ''                              # selected-option
+                        '',  # Title (blank)
+                        html.escape(mcq['question']),
+                        '2',  # Q type (2 for single choice)
+                        *[html.escape(opt) for opt in mcq['options']],
+                        *('' for _ in range(4 - len(mcq['options']))),  # Pad with empty strings if less than 4 options
+                        '',  # Q_5 (optional 5th option)
+                        mcq['answers'],
+                        '',  # ShuffleOrder (empty initially)
+                        '',  # selected-option (empty initially)
                     ]
                 )
                 self.deck.add_note(note)
