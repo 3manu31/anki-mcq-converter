@@ -36,17 +36,30 @@ class MCQConverter:
                     </div>
                     <div id="selected-option" style="display:none;">{{selected-option}}</div>
                     <div id="answers" style="display:none;">{{Answers}}</div>
+                    <div id="shuffle-order" style="display:none;"></div>
                     
                     <!-- Hidden option data -->
                     <div style="display:none;" id="option-data">
-                        <div data-index="0">{{Q_1}}</div>
-                        <div data-index="1">{{Q_2}}</div>
-                        <div data-index="2">{{Q_3}}</div>
-                        <div data-index="3">{{Q_4}}</div>
+                        {{#Q_1}}<div data-index="0">{{Q_1}}</div>{{/Q_1}}
+                        {{#Q_2}}<div data-index="1">{{Q_2}}</div>{{/Q_2}}
+                        {{#Q_3}}<div data-index="2">{{Q_3}}</div>{{/Q_3}}
+                        {{#Q_4}}<div data-index="3">{{Q_4}}</div>{{/Q_4}}
+                    </div>
+                    
+                    <!-- Answer review section (initially hidden) -->
+                    <div id="answer-review" style="display:none;">
+                        <hr style="margin: 20px 0; border: 1px solid #ddd;">
+                        <div style="text-align: center; margin: 20px 0; font-weight: bold; color: #333;">
+                            Answer Review Complete
+                        </div>
                     </div>
                     
                     <script>
-                    // Shuffle array function
+                    // Flag to prevent re-initialization after answer is selected
+                    let cardInitialized = false;
+                    let answerSelected = false;
+                    
+                    // Simple random shuffle function
                     function shuffleArray(array) {
                         const shuffled = [...array];
                         for (let i = shuffled.length - 1; i > 0; i--) {
@@ -56,23 +69,32 @@ class MCQConverter:
                         return shuffled;
                     }
                     
-                    // Initialize options with shuffle
+                    // Initialize options with shuffle (ONLY ONCE)
                     function initializeOptions() {
+                        // Prevent re-initialization if already done or answer selected
+                        if (cardInitialized || answerSelected) {
+                            return;
+                        }
+                        
                         const container = document.getElementById('options-container');
                         const optionData = document.getElementById('option-data');
                         const options = Array.from(optionData.children).filter(el => el.textContent.trim() !== '');
                         
-                        // Create option objects with original indices
+                        // Mark as initialized
+                        cardInitialized = true;
                         const optionObjects = options.map((el, i) => ({
                             text: el.textContent.trim(),
                             originalIndex: parseInt(el.getAttribute('data-index')),
                             displayIndex: i
                         }));
                         
-                        // Shuffle the options
+                        // Shuffle the options randomly each time
                         const shuffledOptions = shuffleArray(optionObjects);
                         
-                        // Clear container and add shuffled options
+                        // Store shuffle order for consistency
+                        document.getElementById('shuffle-order').textContent = JSON.stringify(shuffledOptions);
+                        
+                        // Clear container and add options in shuffled order
                         container.innerHTML = '';
                         shuffledOptions.forEach((option, i) => {
                             const wrapper = document.createElement('div');
@@ -114,11 +136,26 @@ class MCQConverter:
                         feedbackDiv.style.fontWeight = 'bold';
                         feedbackDiv.style.zIndex = '1000';
                         document.body.appendChild(feedbackDiv);
+                        
+                        // Remove feedback after 2 seconds
+                        setTimeout(function() {
+                            feedbackDiv.remove();
+                        }, 2000);
                     }
 
                     function ankiSelectOption(index) {
+                        // Mark that an answer has been selected
+                        answerSelected = true;
+                        
+                        // Prevent multiple selections
                         var allOptions = document.querySelectorAll('.option-wrapper');
-                        allOptions.forEach(opt => opt.className = 'option-wrapper');
+                        var alreadyAnswered = Array.from(allOptions).some(opt => 
+                            opt.className.includes('selected-') || opt.className.includes('correct'));
+                        
+                        if (alreadyAnswered) return; // Don't allow re-selection
+                        
+                        // Clear all option styles first
+                        allOptions.forEach(opt => opt.className = 'option-wrapper disabled');
                         
                         var selected = document.querySelector('.option-wrapper[data-index="' + index + '"]');
                         if (selected) {
@@ -127,53 +164,47 @@ class MCQConverter:
                             
                             showFeedback(isCorrect);
                             
-                            if (!isCorrect) {
-                                // Show correct answer
-                                var answers = document.getElementById('answers').textContent.trim().split(" ");
-                                answers.forEach((ans, i) => {
-                                    if (ans === "1") {
-                                        var correct = document.querySelector('.option-wrapper[data-index="' + i + '"]');
-                                        if (correct) correct.className += ' correct';
+                            // Always show the correct answer(s) for learning
+                            var answers = document.getElementById('answers').textContent.trim().split(" ");
+                            answers.forEach((ans, i) => {
+                                if (ans === "1") {
+                                    var correct = document.querySelector('.option-wrapper[data-index="' + i + '"]');
+                                    if (correct && !correct.className.includes('selected-')) {
+                                        correct.className = 'option-wrapper correct disabled';
                                     }
-                                });
-                            }
+                                }
+                            });
                             
+                            // Store selection
                             var hidden = document.getElementById('selected-option');
                             if (hidden) hidden.textContent = index;
+                            
+                            // Disable clicking on all options
+                            allOptions.forEach(opt => {
+                                opt.onclick = null;
+                                opt.style.cursor = 'default';
+                            });
+                            
+                            // Show answer review section without triggering card flip
+                            setTimeout(function() {
+                                document.getElementById('answer-review').style.display = 'block';
+                            }, 1500); // Give time to see the feedback
                         }
                     }
                     
                     // Initialize when page loads
                     document.addEventListener('DOMContentLoaded', initializeOptions);
-                    // Also initialize immediately in case DOMContentLoaded already fired
-                    if (document.readyState === 'loading') {
-                        document.addEventListener('DOMContentLoaded', initializeOptions);
-                    } else {
+                    if (document.readyState !== 'loading') {
                         initializeOptions();
                     }
                     </script>
                 ''',
                 'afmt': '''
                     {{FrontSide}}
-                    <hr id="answer">
-                    <script>
-                    // Automatically show correct answer on the back
-                    (function() {
-                        var answers = document.getElementById('answers').textContent.trim().split(" ");
-                        answers.forEach((ans, i) => {
-                            if (ans === "1") {
-                                var correct = document.querySelector('.option-wrapper[data-index="' + i + '"]');
-                                if (correct) correct.className += ' correct';
-                            }
-                        });
-                        
-                        // If an option was selected, show it
-                        var selected = document.getElementById('selected-option');
-                        if (selected && selected.textContent) {
-                            ankiSelectOption(parseInt(selected.textContent));
-                        }
-                    })();
-                    </script>
+                    <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <strong>Review Complete</strong><br>
+                        <small>Use the buttons below to rate your performance</small>
+                    </div>
                 '''
             }],
             css='''
@@ -190,7 +221,7 @@ class MCQConverter:
                     font-weight: bold;
                     margin-bottom: 20px;
                 }
-                #options-container {
+                #options-container, #options-container-back {
                     margin-top: 20px;
                 }
                 .option-wrapper {
@@ -202,10 +233,14 @@ class MCQConverter:
                     transition: all 0.3s ease;
                     background-color: white;
                 }
-                .option-wrapper:hover {
+                .option-wrapper:hover:not(.disabled) {
                     background-color: #f5f5f5;
                     border-color: #bbb;
                     transform: translateY(-1px);
+                }
+                .option-wrapper.disabled {
+                    cursor: default !important;
+                    pointer-events: none;
                 }
                 .option-wrapper.correct {
                     background-color: #e8f5e9;
@@ -239,6 +274,14 @@ class MCQConverter:
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translate(-50%, 10px); }
                     to { opacity: 1; transform: translate(-50%, 0); }
+                }
+                #answer-review {
+                    margin-top: 15px;
+                    animation: slideDown 0.3s ease;
+                }
+                @keyframes slideDown {
+                    from { opacity: 0; transform: translateY(-10px); }
+                    to { opacity: 1; transform: translateY(0); }
                 }
             '''
         )
@@ -288,23 +331,18 @@ class MCQConverter:
                 
             mcq = self.parse_mcq_line(line)
             if mcq:
-                # Pad options to 4 elements
-                options = mcq['options'] + [''] * (4 - len(mcq['options']))
-                
-                # Create note with the MCQ data (no shuffling here - done dynamically in JavaScript)
+                # Create note with the MCQ data
                 note = genanki.Note(
                     model=self.model,
                     fields=[
                         '',  # Title (blank)
                         html.escape(mcq['question']),
                         '2',  # Q type (2 for single choice)
-                        html.escape(options[0]),  # Q_1
-                        html.escape(options[1]),  # Q_2
-                        html.escape(options[2]),  # Q_3
-                        html.escape(options[3]),  # Q_4
+                        *[html.escape(opt) for opt in mcq['options']],
+                        *('' for _ in range(4 - len(mcq['options']))),  # Pad with empty strings if less than 4 options
                         '',  # Q_5 (optional 5th option)
-                        mcq['answers'],  # Original answer mapping
-                        '',  # ShuffleOrder (not used with dynamic shuffling)
+                        mcq['answers'],
+                        '',  # ShuffleOrder (empty initially)
                         '',  # selected-option (empty initially)
                     ]
                 )
