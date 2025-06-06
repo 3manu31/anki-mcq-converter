@@ -342,20 +342,19 @@ class MCQConverter:
                 
             mcq = self.parse_mcq_line(line)
             if mcq:
+                # Create note with the MCQ data
                 note = genanki.Note(
                     model=self.model,
                     fields=[
-                        '',                             # Title
-                        html.escape(mcq['question']),   # Question
-                        '1',                            # Q type (1 for multiple choice)
-                        html.escape(mcq['options'][0]), # Q_1
-                        html.escape(mcq['options'][1]), # Q_2
-                        html.escape(mcq['options'][2]), # Q_3
-                        html.escape(mcq['options'][3]), # Q_4
-                        '',                             # Q_5
-                        mcq['answers'],                 # Answers
-                        '',                             # ShuffleOrder
-                        ''                              # selected-option
+                        '',  # Title (blank)
+                        html.escape(mcq['question']),
+                        '2',  # Q type (2 for single choice)
+                        *[html.escape(opt) for opt in mcq['options']],
+                        *('' for _ in range(4 - len(mcq['options']))),  # Pad with empty strings if less than 4 options
+                        '',  # Q_5 (optional 5th option)
+                        mcq['answers'],
+                        '',  # ShuffleOrder (empty initially)
+                        '',  # selected-option (empty initially)
                     ]
                 )
                 self.deck.add_note(note)
